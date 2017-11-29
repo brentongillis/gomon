@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -76,9 +75,9 @@ func (gm *gm) setWatcher() {
 			// case fsnotify.Create:
 			// 	fmt.Println("CREATE", event.Name)
 			case fsnotify.Write:
-				fmt.Println("WRITE", event.Name)
-				if strings.Contains(event.Name, ".go") ||
-					strings.Contains(event.Name, ".tmpl") {
+				// fmt.Println("WRITE", event.Name)
+				if filepath.Ext(event.Name) == ".go" ||
+					filepath.Ext(event.Name) == ".tmpl" {
 					gm.restart <- struct{}{}
 				}
 				// case fsnotify.Remove:
