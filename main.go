@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	// "sync"
 	"syscall"
 	"time"
 
@@ -70,22 +71,34 @@ func (gm *gm) setWatcher() {
 	}
 
 	go func() {
-		for event := range gm.watcher.Events {
-			switch event.Op {
-			// case fsnotify.Create:
-			// 	fmt.Println("CREATE", event.Name)
-			case fsnotify.Write:
-				// fmt.Println("WRITE", event.Name)
-				if filepath.Ext(event.Name) == ".go" ||
-					filepath.Ext(event.Name) == ".tmpl" {
-					gm.restart <- struct{}{}
+		guarding := false
+		for {
+			select {
+			case event := <-gm.watcher.Events:
+				if !guarding {
+					<-time.After(time.Microsecond * 750)
+					if filepath.Ext(event.Name) == ".go" || filepath.Ext(event.Name) == ".tmpl" {
+						gm.restart <- struct{}{}
+					}
+					guarding = !guarding
 				}
+				// switch event.Op {
+				// case fsnotify.Create:
+				// 	fmt.Println("CREATE", event.Name)
+				// case fsnotify.Write:
+				// 	fmt.Println("WRITE", event.Name)
 				// case fsnotify.Remove:
 				// 	fmt.Println("REMOVE", event.Name)
 				// case fsnotify.Rename:
 				// 	fmt.Println("RENAME", event.Name)
 				// case fsnotify.Chmod:
 				// 	fmt.Println("CHMOD", event.Name)
+				// }
+			case err := <-gm.watcher.Errors:
+				if err != nil {
+					gm.eprintf("%s\n", err)
+				}
+				return
 			}
 		}
 	}()
@@ -105,6 +118,11 @@ func (gm *gm) execute() {
 // kill the process by killing its pid group, this kills as subprocesses
 // as well. This function is registered with the closer
 func (gm *gm) killPGroup() int {
+	// defer func() {
+	// 	if r := recover(); r != nil {
+	// 		fmt.Println("Recovering panic", r)
+	// 	}
+	// }()
 	gm.printf("Kill process group\n")
 	if e := syscall.Kill(-gm.cmd.Process.Pid, syscall.SIGKILL); e != nil {
 		gm.eprintf("%s\n", e.Error())
@@ -197,6 +215,5 @@ func main() {
 		<-gm.restart
 		gm.printf("Restarting %s\n", os.Args[1])
 		gm.killPGroup()
-
 	}
 }
